@@ -45,7 +45,7 @@ Situação de um lançamento que já aconteceu de fato.
 _Avoid_: Pago, realizado, confirmado
 
 **Categoria**:
-Uma classificação de lançamentos pertencente à residência, mantida pelos Administradores.
+Uma classificação de lançamentos de um mesmo tipo (Receita ou Despesa), pertencente à residência e mantida pelos Administradores.
 _Avoid_: Tag, tipo, grupo
 
 **Recorrência**:

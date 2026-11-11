@@ -1,0 +1,18 @@
+[package]
+name = "finance-core"
+version = "0.1.0"
+description = "Regras de negócio e persistência de uma residência"
+edition = "2024"
+
+[dependencies]
+argon2 = "0.6.0"
+chrono = { version = "0.4.45", default-features = false, features = ["serde", "std", "clock"] }
+rusqlite = { version = "0.42.0", features = ["bundled", "chrono"] }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+uuid = { version = "1.29.2", features = ["v4", "serde"] }
+
+[dev-dependencies]
+chrono = "0.4.45"
+rusqlite = "0.42.0"
+uuid = "1.29.2"

@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Phase =
   | { kind: "idle" }
@@ -27,6 +36,7 @@ export function UpdatePrompt() {
   if (phase.kind === "idle") return null;
 
   const { update } = phase;
+  const installing = phase.kind === "installing";
 
   async function install() {
     setPhase({ kind: "installing", update, percent: null });
@@ -51,41 +61,48 @@ export function UpdatePrompt() {
   }
 
   return (
-    <div className="update-backdrop">
-      <div className="update-dialog" role="dialog" aria-modal="true">
-        <h2>Nova versão disponível</h2>
-        <p>
-          A versão {update.version} está pronta para instalar. Você está na{" "}
-          {update.currentVersion}.
-        </p>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !installing) setPhase({ kind: "idle" });
+      }}
+    >
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Nova versão disponível</DialogTitle>
+          <DialogDescription>
+            A versão {update.version} está pronta para instalar. Você está na{" "}
+            {update.currentVersion}.
+          </DialogDescription>
+        </DialogHeader>
 
-        {phase.kind === "installing" && (
-          <p className="update-status">
+        {installing && (
+          <p className="text-sm text-muted-foreground">
             {phase.percent === null
               ? "Baixando…"
               : `Baixando… ${phase.percent}%`}
           </p>
         )}
         {phase.kind === "failed" && (
-          <p className="update-status update-error">
+          <p role="alert" className="text-sm text-destructive">
             Não foi possível atualizar. Você pode tentar de novo ou continuar
             usando esta versão.
           </p>
         )}
 
-        {phase.kind !== "installing" && (
-          <div className="update-actions">
-            <button onClick={() => setPhase({ kind: "idle" })}>
+        {!installing && (
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhase({ kind: "idle" })}>
               Agora não
-            </button>
-            <button className="primary" onClick={install}>
+            </Button>
+            <Button onClick={install}>
               {phase.kind === "failed"
                 ? "Tentar de novo"
                 : "Atualizar e reiniciar"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

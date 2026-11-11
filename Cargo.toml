@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src-tauri"]
+members = ["crates/core", "src-tauri"]
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
@@ -9,3 +9,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Argon2 sem otimização deixa cada login de teste levando segundos.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
