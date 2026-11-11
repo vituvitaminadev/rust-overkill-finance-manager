@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Finance Manager",
+  "version": "0.1.0",
+  "identifier": "dev.vituvitamina.financemanager",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Finanças da Residência",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "appimage"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyNTYzQjY5NzNBNEI2M0IKUldRN3RxUnphVHRXWXRvd2Y1bEs0T3A5ZXUvdUI0NE4zZHZ4TUdoU1VBZ1d2Vm02TGxhRUtuK28K",
+      "endpoints": [
+        "https://github.com/vituvitaminadev/rust-overkill-finance-manager/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
