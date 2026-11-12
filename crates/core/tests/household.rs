@@ -102,6 +102,8 @@ fn household_survives_being_closed_and_reopened() {
 
     assert_eq!(reopened.info().unwrap().name, "Casa");
     assert_eq!(reopened.authenticate("vitu", PASSWORD).unwrap(), admin);
+    // O Windows não deixa apagar um arquivo que ainda está aberto.
+    drop(reopened);
     std::fs::remove_file(path).unwrap();
 }
 
