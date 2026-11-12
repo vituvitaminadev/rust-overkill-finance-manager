@@ -10,9 +10,11 @@ mod dashboard;
 mod entries;
 mod error;
 mod household;
+mod members;
 mod month;
 mod planning;
 mod schema;
+mod sync;
 
 pub use categories::{Category, NewCategory};
 pub use clock::{Clock, SystemClock};
@@ -22,9 +24,14 @@ pub use error::{Error, Result};
 pub use household::{
     Household, HouseholdInfo, Invite, Member, NewHousehold, NewUser, Role, UserCredentials,
 };
+pub use members::PendingInvite;
 pub use month::Month;
 pub use planning::{InstallmentPlan, InstallmentPlanInput, Recurrence, RecurrenceInput};
 pub use rusqlite::Connection;
+pub use sync::{
+    ChangeSet, Conflict, ConflictSide, EntryChange, HostCommand, PROTOCOL_VERSION, PendingChange,
+    PushOutcome, SyncStatus,
+};
 
 pub type HouseholdId = uuid::Uuid;
 pub type MemberId = uuid::Uuid;

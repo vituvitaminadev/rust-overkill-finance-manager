@@ -68,7 +68,7 @@ fn unknown_value(index: usize, what: &str, value: &str) -> rusqlite::Error {
     )
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryInput {
     pub kind: EntryKind,
@@ -141,6 +141,7 @@ pub(crate) const SELECT_ENTRY: &str = "
 
 /// Um lançamento já validado, pronto para ser gravado.
 pub(crate) struct NewEntryRow<'a> {
+    pub id: EntryId,
     pub kind: EntryKind,
     pub amount_cents: i64,
     pub date: NaiveDate,
@@ -160,7 +161,7 @@ pub(crate) fn insert_entry(
     now: DateTime<Utc>,
     row: &NewEntryRow<'_>,
 ) -> rusqlite::Result<EntryId> {
-    let id = Uuid::new_v4();
+    let id = row.id;
     conn.execute(
         "INSERT INTO entry (id, kind, amount_cents, date, description, category_id, assignee_id,
                             created_by, status, recurrence_id, occurrence_month,
@@ -199,6 +200,7 @@ impl Household {
             &self.conn,
             self.clock.now(),
             &NewEntryRow {
+                id: Uuid::new_v4(),
                 kind: input.kind,
                 amount_cents: input.amount_cents,
                 date: input.date,
@@ -211,6 +213,7 @@ impl Household {
                 installment: None,
             },
         )?;
+        self.mark_dirty(id, 0)?;
         self.entry(&actor, id)
     }
 
@@ -238,6 +241,7 @@ impl Household {
                 id.to_string()
             ],
         )?;
+        self.mark_dirty(id, current.version)?;
         self.entry(&actor, id)
     }
 
@@ -261,18 +265,34 @@ impl Household {
              WHERE id = ?3",
             params![amount_cents, self.clock.now(), id.to_string()],
         )?;
+        self.mark_dirty(id, current.version)?;
         self.entry(&actor, id)
     }
 
     pub fn delete_entry(&self, actor: MemberId, id: EntryId) -> Result<()> {
         let actor = self.actor(actor)?;
-        self.editable_entry(&actor, id)?;
+        let current = self.editable_entry(&actor, id)?;
         // A linha fica, marcada: a sincronização precisa saber que houve uma exclusão.
         self.conn.execute(
             "UPDATE entry SET deleted_at = ?1, updated_at = ?1, version = version + 1
              WHERE id = ?2",
             params![self.clock.now(), id.to_string()],
         )?;
+        self.mark_dirty(id, current.version)?;
+        Ok(())
+    }
+
+    /// Na cópia, anota que o lançamento tem uma alteração local a enviar ao
+    /// Anfitrião e de qual versão dele ela partiu. No Anfitrião, não faz nada.
+    fn mark_dirty(&self, id: EntryId, previous_version: i64) -> Result<()> {
+        if self.replica {
+            self.conn.execute(
+                "UPDATE entry
+                 SET dirty = dirty + 1, base_version = COALESCE(base_version, ?1)
+                 WHERE id = ?2",
+                params![previous_version, id.to_string()],
+            )?;
+        }
         Ok(())
     }
 

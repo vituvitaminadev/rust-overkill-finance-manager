@@ -19,6 +19,12 @@ pub enum Error {
     InviteExpired,
     #[error("Este convite já foi usado.")]
     InviteUsed,
+    #[error("Esta ação precisa de conexão com o Anfitrião.")]
+    NeedsHost,
+    #[error("A residência precisa ter pelo menos um administrador.")]
+    LastAdmin,
+    #[error("Sessão inválida. Entre de novo.")]
+    InvalidSession,
     #[error("Este arquivo foi criado por uma versão mais nova do app.")]
     NewerSchema,
     #[error("Erro no banco de dados: {0}")]
@@ -39,6 +45,9 @@ impl Error {
             Error::InviteInvalid => "invite_invalid",
             Error::InviteExpired => "invite_expired",
             Error::InviteUsed => "invite_used",
+            Error::NeedsHost => "needs_host",
+            Error::LastAdmin => "last_admin",
+            Error::InvalidSession => "invalid_session",
             Error::NewerSchema => "newer_schema",
             Error::Db(_) => "db",
             Error::PasswordHash(_) => "password_hash",

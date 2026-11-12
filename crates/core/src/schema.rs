@@ -106,6 +106,57 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE entry ADD COLUMN installment_plan_id TEXT REFERENCES installment_plan (id);
     ALTER TABLE entry ADD COLUMN installment_number INTEGER;
 ",
+    // Sincronização (ADR 0001): relógio de alterações do Anfitrião, alterações
+    // pendentes e conflitos da cópia, sessões e estado local desta máquina.
+    "
+    CREATE TABLE sync_clock (value INTEGER NOT NULL);
+    INSERT INTO sync_clock VALUES (1);
+
+    ALTER TABLE household ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE member ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE category ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE recurrence ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE installment_plan ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE entry ADD COLUMN seq INTEGER NOT NULL DEFAULT 1;
+
+    -- Só na cópia: quantas alterações locais ainda não chegaram ao Anfitrião,
+    -- e de qual versão dele elas partiram.
+    ALTER TABLE entry ADD COLUMN dirty INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE entry ADD COLUMN base_version INTEGER;
+
+    CREATE TABLE conflict (
+        entry_id      TEXT PRIMARY KEY,
+        -- A linha do Anfitrião em JSON; nula quando ele não tem o lançamento.
+        host_row      TEXT,
+        host_version  INTEGER NOT NULL,
+        -- Preenchido quando o Anfitrião recusou a alteração em vez de divergir dela.
+        reason        TEXT
+    );
+
+    ALTER TABLE invite ADD COLUMN revoked_at TEXT;
+
+    CREATE TABLE host_session (
+        token_hash  TEXT PRIMARY KEY,
+        member_id   TEXT NOT NULL REFERENCES member (id),
+        created_at  TEXT NOT NULL
+    );
+
+    -- Nunca sincronizado: papel desta máquina, cursor, identidade TLS, credenciais.
+    CREATE TABLE local_state (
+        key    TEXT PRIMARY KEY,
+        value  TEXT NOT NULL
+    );
+",
+];
+
+/// As tabelas sincronizadas, em uma ordem que respeita as chaves estrangeiras.
+pub(crate) const SYNCED_TABLES: &[&str] = &[
+    "household",
+    "member",
+    "category",
+    "recurrence",
+    "installment_plan",
+    "entry",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -120,6 +171,28 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         tx.execute_batch(sql)?;
         tx.pragma_update(None, "user_version", index as u32 + 1)?;
         tx.commit()?;
+    }
+    create_seq_triggers(conn)?;
+    Ok(())
+}
+
+/// Toda escrita em uma tabela sincronizada carimba a linha com o próximo valor
+/// do relógio, e é por esse carimbo que as cópias pedem "o que mudou desde X".
+/// Quem grava `seq` explicitamente, como a cópia ao aplicar o que recebeu,
+/// não dispara o carimbo.
+fn create_seq_triggers(conn: &Connection) -> Result<()> {
+    for table in SYNCED_TABLES {
+        let stamp = format!(
+            "UPDATE sync_clock SET value = value + 1;
+             UPDATE {table} SET seq = (SELECT value FROM sync_clock) WHERE id = NEW.id;"
+        );
+        conn.execute_batch(&format!(
+            "CREATE TRIGGER IF NOT EXISTS {table}_seq_insert AFTER INSERT ON {table}
+             BEGIN {stamp} END;
+             CREATE TRIGGER IF NOT EXISTS {table}_seq_update AFTER UPDATE ON {table}
+             WHEN NEW.seq IS OLD.seq
+             BEGIN {stamp} END;"
+        ))?;
     }
     Ok(())
 }

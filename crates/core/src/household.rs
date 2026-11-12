@@ -16,11 +16,16 @@ const INVITE_VALIDITY_HOURS: i64 = 24;
 // Sem I, O, 0 e 1, que se confundem ao ditar o código.
 const INVITE_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MIN_PASSWORD_CHARS: usize = 8;
+const ROLE_KEY: &str = "role";
+const ROLE_HOST: &str = "host";
+const ROLE_REPLICA: &str = "replica";
 
 /// Uma Residência aberta: a interface de aplicação sobre o seu banco de dados.
 pub struct Household {
     pub(crate) conn: Connection,
     pub(crate) clock: Arc<dyn Clock>,
+    /// Verdadeiro na cópia de outra máquina; falso no Anfitrião, a fonte da verdade.
+    pub(crate) replica: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -38,7 +43,7 @@ pub enum Role {
 }
 
 impl Role {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Role::Admin => "admin",
             Role::Common => "common",
@@ -76,6 +81,7 @@ pub struct NewHousehold {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Invite {
+    pub id: Uuid,
     pub code: String,
     pub expires_at: DateTime<Utc>,
 }
@@ -96,8 +102,13 @@ impl Household {
             NewUser::Existing(credentials) => credentials,
         };
 
-        schema::migrate(&conn)?;
-        let household = Household { conn, clock };
+        prepare(&conn)?;
+        let household = Household {
+            conn,
+            clock,
+            replica: false,
+        };
+        household.set_local(ROLE_KEY, ROLE_HOST)?;
         let now = household.clock.now();
         let tx = household.conn.unchecked_transaction()?;
         tx.execute(
@@ -118,8 +129,60 @@ impl Household {
     }
 
     pub fn open(conn: Connection, clock: Arc<dyn Clock>) -> Result<Household> {
-        schema::migrate(&conn)?;
-        Ok(Household { conn, clock })
+        prepare(&conn)?;
+        let mut household = Household {
+            conn,
+            clock,
+            replica: false,
+        };
+        household.replica = household.local(ROLE_KEY)?.as_deref() == Some(ROLE_REPLICA);
+        Ok(household)
+    }
+
+    /// Prepara um banco vazio para ser a cópia de uma residência hospedada em
+    /// outra máquina. Os dados chegam depois, por [`Household::apply_changes`].
+    pub fn create_replica(conn: Connection, clock: Arc<dyn Clock>) -> Result<Household> {
+        prepare(&conn)?;
+        let household = Household {
+            conn,
+            clock,
+            replica: true,
+        };
+        household.set_local(ROLE_KEY, ROLE_REPLICA)?;
+        Ok(household)
+    }
+
+    pub fn is_replica(&self) -> bool {
+        self.replica
+    }
+
+    /// Um valor do estado local desta máquina, que nunca é sincronizado.
+    pub fn local(&self, key: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM local_state WHERE key = ?1",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    pub fn set_local(&self, key: &str, value: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO local_state (key, value) VALUES (?1, ?2)
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Recusa, na cópia, o que só o Anfitrião pode fazer (ADR 0001).
+    pub(crate) fn host_only(&self) -> Result<()> {
+        if self.replica {
+            return Err(Error::NeedsHost);
+        }
+        Ok(())
     }
 
     pub fn info(&self) -> Result<HouseholdInfo> {
@@ -144,10 +207,9 @@ impl Household {
             )
             .optional()?;
         let (id, hash) = found.ok_or(Error::InvalidCredentials)?;
-        let hash = PasswordHash::new(&hash).map_err(|e| Error::PasswordHash(e.to_string()))?;
-        Argon2::default()
-            .verify_password(password.as_bytes(), &hash)
-            .map_err(|_| Error::InvalidCredentials)?;
+        if !password_matches(&hash, password)? {
+            return Err(Error::InvalidCredentials);
+        }
         self.member(Uuid::parse_str(&id).map_err(|_| Error::NotFound)?)
     }
 
@@ -191,9 +253,11 @@ impl Household {
     }
 
     pub fn create_invite(&self, actor: MemberId) -> Result<Invite> {
+        self.host_only()?;
         self.admin(actor)?;
         let now = self.clock.now();
         let invite = Invite {
+            id: Uuid::new_v4(),
             code: invite_code(),
             expires_at: now + Duration::hours(INVITE_VALIDITY_HOURS),
         };
@@ -201,7 +265,7 @@ impl Household {
             "INSERT INTO invite (id, code, created_by, created_at, expires_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
-                Uuid::new_v4().to_string(),
+                invite.id.to_string(),
                 invite.code,
                 actor.to_string(),
                 now,
@@ -213,12 +277,14 @@ impl Household {
 
     /// Consome o Convite e cria um membro Comum com as credenciais informadas.
     pub fn accept_invite(&self, code: &str, username: &str, password: &str) -> Result<Member> {
+        self.host_only()?;
         let now = self.clock.now();
         let code = code.trim().to_uppercase();
         let found: Option<(String, DateTime<Utc>, Option<DateTime<Utc>>)> = self
             .conn
             .query_row(
-                "SELECT id, expires_at, used_at FROM invite WHERE code = ?1",
+                "SELECT id, expires_at, used_at FROM invite
+                 WHERE code = ?1 AND revoked_at IS NULL",
                 [&code],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
@@ -265,20 +331,40 @@ fn new_credentials(username: &str, password: &str) -> Result<UserCredentials> {
     if username.is_empty() {
         return Err(Error::invalid("Informe um nome de usuário."));
     }
-    if password.chars().count() < MIN_PASSWORD_CHARS {
-        return Err(Error::Invalid(format!(
-            "A senha precisa ter pelo menos {MIN_PASSWORD_CHARS} caracteres."
-        )));
-    }
-    let password_hash = Argon2::default()
-        .hash_password(password.as_bytes())
-        .map_err(|e| Error::PasswordHash(e.to_string()))?
-        .to_string();
+    let password_hash = hash_password(password)?;
     Ok(UserCredentials {
         user_id: Uuid::new_v4(),
         username: username.to_owned(),
         password_hash,
     })
+}
+
+/// Valida o tamanho da senha e devolve o hash a guardar.
+pub(crate) fn hash_password(password: &str) -> Result<String> {
+    if password.chars().count() < MIN_PASSWORD_CHARS {
+        return Err(Error::Invalid(format!(
+            "A senha precisa ter pelo menos {MIN_PASSWORD_CHARS} caracteres."
+        )));
+    }
+    Ok(Argon2::default()
+        .hash_password(password.as_bytes())
+        .map_err(|e| Error::PasswordHash(e.to_string()))?
+        .to_string())
+}
+
+pub(crate) fn password_matches(hash: &str, password: &str) -> Result<bool> {
+    let hash = PasswordHash::new(hash).map_err(|e| Error::PasswordHash(e.to_string()))?;
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &hash)
+        .is_ok())
+}
+
+/// Aplica as migrações e ajusta o banco para ser usado por mais de uma conexão:
+/// a interface e o servidor do Anfitrião abrem o mesmo arquivo.
+fn prepare(conn: &Connection) -> Result<()> {
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+    schema::migrate(conn)
 }
 
 fn insert_member(

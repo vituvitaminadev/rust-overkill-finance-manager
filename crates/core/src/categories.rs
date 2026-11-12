@@ -28,7 +28,7 @@ pub struct Category {
     pub archived: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewCategory {
     pub name: String,
@@ -50,6 +50,7 @@ impl Household {
     }
 
     pub fn create_category(&self, actor: MemberId, new: NewCategory) -> Result<Category> {
+        self.host_only()?;
         self.admin(actor)?;
         let name = self.available_category_name(&new.name, new.kind, None)?;
         let id = Uuid::new_v4();
@@ -61,6 +62,7 @@ impl Household {
     }
 
     pub fn rename_category(&self, actor: MemberId, id: CategoryId, name: &str) -> Result<Category> {
+        self.host_only()?;
         self.admin(actor)?;
         let category = self.category(id)?;
         let name = self.available_category_name(name, category.kind, Some(id))?;
@@ -78,6 +80,7 @@ impl Household {
         id: CategoryId,
         archived: bool,
     ) -> Result<Category> {
+        self.host_only()?;
         self.admin(actor)?;
         self.category(id)?;
         self.conn.execute(

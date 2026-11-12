@@ -18,7 +18,7 @@ use crate::{
 const HORIZON_MONTHS: i32 = 12;
 const MAX_INSTALLMENTS: u32 = 360;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecurrenceInput {
     pub kind: EntryKind,
@@ -51,7 +51,7 @@ pub struct Recurrence {
     pub can_edit: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallmentPlanInput {
     pub description: String,
@@ -91,6 +91,7 @@ const SELECT_RECURRENCE: &str = "
 
 impl Household {
     pub fn create_recurrence(&self, actor: MemberId, input: RecurrenceInput) -> Result<Recurrence> {
+        self.host_only()?;
         let actor = self.actor(actor)?;
         let start_month = Month::of(input.first_date);
         if input.end_month.is_some_and(|end| end < start_month) {
@@ -140,6 +141,7 @@ impl Household {
     /// Encerra a Recorrência: os previstos futuros somem, e o que já aconteceu
     /// ou está atrasado permanece.
     pub fn end_recurrence(&self, actor: MemberId, id: RecurrenceId) -> Result<()> {
+        self.host_only()?;
         let actor = self.actor(actor)?;
         self.editable_recurrence(&actor, id)?;
         let now = self.clock.now();
@@ -168,6 +170,7 @@ impl Household {
         id: EntryId,
         input: EntryInput,
     ) -> Result<Entry> {
+        self.host_only()?;
         let actor = self.actor(actor)?;
         let current = self.editable_entry(&actor, id)?;
         let recurrence_id = current
@@ -256,6 +259,10 @@ impl Household {
     /// Gera os lançamentos previstos que faltam para cada Recorrência cobrir
     /// os próximos doze meses.
     pub(crate) fn top_up_recurrences(&self) -> Result<()> {
+        // Só o Anfitrião gera: duas cópias gerando a mesma série a duplicariam.
+        if self.replica {
+            return Ok(());
+        }
         let horizon = Month::of(self.clock.today()).plus(HORIZON_MONTHS);
         let pending: Vec<PendingRecurrence> = {
             let mut stmt = self.conn.prepare(
@@ -291,6 +298,7 @@ impl Household {
                     &tx,
                     now,
                     &NewEntryRow {
+                        id: Uuid::new_v4(),
                         kind: recurrence.kind,
                         amount_cents: recurrence.amount_cents,
                         date: month.day(recurrence.day_of_month),
@@ -320,6 +328,7 @@ impl Household {
         actor: MemberId,
         input: InstallmentPlanInput,
     ) -> Result<InstallmentPlan> {
+        self.host_only()?;
         let actor = self.actor(actor)?;
         if !(2..=MAX_INSTALLMENTS).contains(&input.count) {
             return Err(Error::Invalid(format!(
@@ -373,6 +382,7 @@ impl Household {
                 &tx,
                 now,
                 &NewEntryRow {
+                    id: Uuid::new_v4(),
                     kind: EntryKind::Expense,
                     // Os centavos que sobram da divisão vão para a primeira parcela.
                     amount_cents: if number == 1 { base + remainder } else { base },
@@ -408,6 +418,7 @@ impl Household {
 
     /// Desfaz o Parcelamento: as parcelas previstas somem e as efetivadas permanecem.
     pub fn delete_installment_plan(&self, actor: MemberId, id: InstallmentPlanId) -> Result<()> {
+        self.host_only()?;
         let actor = self.actor(actor)?;
         let plan = self.installment_plan(&actor, id)?;
         if !plan.can_edit {
