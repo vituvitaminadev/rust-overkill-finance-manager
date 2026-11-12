@@ -7,8 +7,9 @@
 use std::sync::{Mutex, MutexGuard};
 
 use finance_core::{
-    Category, CategoryId, Dashboard, Entry, EntryFilter, EntryId, EntryInput, HouseholdId, Member,
-    Month, NewCategory,
+    Category, CategoryId, Dashboard, Entry, EntryFilter, EntryId, EntryInput, HouseholdId,
+    InstallmentPlan, InstallmentPlanId, InstallmentPlanInput, Member, Month, NewCategory,
+    Recurrence, RecurrenceId, RecurrenceInput,
 };
 use tauri::State;
 
@@ -136,11 +137,32 @@ pub fn create_entry(state: State<'_, AppState>, input: EntryInput) -> Result<Ent
     Ok(household.create_entry(actor, input)?)
 }
 
+/// `following` estende a alteração aos previstos seguintes da mesma Recorrência.
 #[tauri::command(async)]
-pub fn update_entry(state: State<'_, AppState>, id: EntryId, input: EntryInput) -> Result<Entry> {
+pub fn update_entry(
+    state: State<'_, AppState>,
+    id: EntryId,
+    input: EntryInput,
+    following: bool,
+) -> Result<Entry> {
     let desk = state.desk();
     let (household, actor) = desk.current()?;
-    Ok(household.update_entry(actor, id, input)?)
+    Ok(if following {
+        household.update_entry_and_following(actor, id, input)?
+    } else {
+        household.update_entry(actor, id, input)?
+    })
+}
+
+#[tauri::command(async)]
+pub fn settle_entry(
+    state: State<'_, AppState>,
+    id: EntryId,
+    amount_cents: Option<i64>,
+) -> Result<Entry> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.settle_entry(actor, id, amount_cents)?)
 }
 
 #[tauri::command(async)]
@@ -155,4 +177,49 @@ pub fn dashboard(state: State<'_, AppState>, month: Month) -> Result<Dashboard> 
     let desk = state.desk();
     let (household, actor) = desk.current()?;
     Ok(household.dashboard(actor, month)?)
+}
+
+#[tauri::command(async)]
+pub fn recurrences(state: State<'_, AppState>) -> Result<Vec<Recurrence>> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.recurrences(actor)?)
+}
+
+#[tauri::command(async)]
+pub fn create_recurrence(state: State<'_, AppState>, input: RecurrenceInput) -> Result<Recurrence> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.create_recurrence(actor, input)?)
+}
+
+#[tauri::command(async)]
+pub fn end_recurrence(state: State<'_, AppState>, id: RecurrenceId) -> Result<()> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.end_recurrence(actor, id)?)
+}
+
+#[tauri::command(async)]
+pub fn installment_plans(state: State<'_, AppState>) -> Result<Vec<InstallmentPlan>> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.installment_plans(actor)?)
+}
+
+#[tauri::command(async)]
+pub fn create_installment_plan(
+    state: State<'_, AppState>,
+    input: InstallmentPlanInput,
+) -> Result<InstallmentPlan> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.create_installment_plan(actor, input)?)
+}
+
+#[tauri::command(async)]
+pub fn delete_installment_plan(state: State<'_, AppState>, id: InstallmentPlanId) -> Result<()> {
+    let desk = state.desk();
+    let (household, actor) = desk.current()?;
+    Ok(household.delete_installment_plan(actor, id)?)
 }

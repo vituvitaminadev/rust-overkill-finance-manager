@@ -6,6 +6,14 @@ import {
 } from "@tanstack/react-query";
 import { api, type EntryFilter } from "./api";
 
+const HOUSEHOLD_DATA = [
+  "entries",
+  "dashboard",
+  "categories",
+  "recurrences",
+  "installmentPlans",
+];
+
 export function useMembers() {
   return useQuery({ queryKey: ["members"], queryFn: api.members });
 }
@@ -31,6 +39,17 @@ export function useDashboard(month: string) {
   });
 }
 
+export function useRecurrences() {
+  return useQuery({ queryKey: ["recurrences"], queryFn: api.recurrences });
+}
+
+export function useInstallmentPlans() {
+  return useQuery({
+    queryKey: ["installmentPlans"],
+    queryFn: api.installmentPlans,
+  });
+}
+
 /** Uma alteração nos dados da residência: ao concluir, tudo o que depende deles é recarregado. */
 export function useHouseholdMutation<Args, Result>(
   action: (args: Args) => Promise<Result>,
@@ -40,7 +59,7 @@ export function useHouseholdMutation<Args, Result>(
   return useMutation({
     mutationFn: action,
     onSuccess: () => {
-      for (const key of ["entries", "dashboard", "categories"]) {
+      for (const key of HOUSEHOLD_DATA) {
         queryClient.invalidateQueries({ queryKey: [key] });
       }
       onDone?.();

@@ -1,17 +1,23 @@
 name: CI
 
+# Roda em toda branch: uma branch verde pode ir para a main sem surpresas.
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches: ["**"]
 
 jobs:
   check:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # O app é distribuído para os dois, e só o release compilava para Windows.
+        platform: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf

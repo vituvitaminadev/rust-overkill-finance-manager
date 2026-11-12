@@ -22,6 +22,10 @@ impl Clock for TestClock {
     fn now(&self) -> DateTime<Utc> {
         *self.0.lock().unwrap()
     }
+
+    fn today(&self) -> NaiveDate {
+        self.now().date_naive()
+    }
 }
 
 /// Uma residência em memória, criada por "vitu" em 11/11/2026.
@@ -63,6 +67,10 @@ impl Fixture {
             .unwrap()
     }
 
+    pub fn clock_month(&self) -> finance_core::Month {
+        finance_core::Month::of(self.clock.today())
+    }
+
     pub fn category(&self, name: &str) -> CategoryId {
         self.household
             .categories(self.admin.id)
@@ -81,6 +89,7 @@ impl Fixture {
             description: format!("{category} de teste"),
             category_id: self.category(category),
             assignee_id: None,
+            status: None,
         }
     }
 
@@ -92,6 +101,7 @@ impl Fixture {
             description: "Salário de teste".into(),
             category_id: self.category("Salário"),
             assignee_id: None,
+            status: None,
         }
     }
 
@@ -106,6 +116,10 @@ impl Fixture {
             .create_entry(actor.id, self.income_input(amount_cents, date))
             .unwrap()
     }
+}
+
+pub fn month(text: &str) -> finance_core::Month {
+    text.parse().unwrap()
 }
 
 pub fn day(date: &str) -> NaiveDate {

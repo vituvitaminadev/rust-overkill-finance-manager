@@ -338,3 +338,12 @@ pub(crate) fn uuid_col(row: &Row<'_>, index: usize) -> rusqlite::Result<Uuid> {
     Uuid::parse_str(&text)
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(e)))
 }
+
+pub(crate) fn opt_uuid_col(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<Uuid>> {
+    let text: Option<String> = row.get(index)?;
+    text.map(|text| {
+        Uuid::parse_str(&text)
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(e)))
+    })
+    .transpose()
+}

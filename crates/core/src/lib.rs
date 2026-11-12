@@ -11,20 +11,24 @@ mod entries;
 mod error;
 mod household;
 mod month;
+mod planning;
 mod schema;
 
 pub use categories::{Category, NewCategory};
 pub use clock::{Clock, SystemClock};
-pub use dashboard::{AssigneeTotal, CategoryTotal, Dashboard, MonthFlow};
-pub use entries::{Entry, EntryFilter, EntryInput, EntryKind};
+pub use dashboard::{AssigneeTotal, CategoryTotal, Dashboard, MonthFlow, Totals};
+pub use entries::{Entry, EntryFilter, EntryInput, EntryKind, EntryStatus, Installment};
 pub use error::{Error, Result};
 pub use household::{
     Household, HouseholdInfo, Invite, Member, NewHousehold, NewUser, Role, UserCredentials,
 };
 pub use month::Month;
+pub use planning::{InstallmentPlan, InstallmentPlanInput, Recurrence, RecurrenceInput};
 pub use rusqlite::Connection;
 
 pub type HouseholdId = uuid::Uuid;
 pub type MemberId = uuid::Uuid;
 pub type CategoryId = uuid::Uuid;
 pub type EntryId = uuid::Uuid;
+pub type RecurrenceId = uuid::Uuid;
+pub type InstallmentPlanId = uuid::Uuid;

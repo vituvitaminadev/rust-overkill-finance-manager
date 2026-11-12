@@ -35,6 +35,13 @@ pub fn run() {
             commands::create_entry,
             commands::update_entry,
             commands::delete_entry,
+            commands::settle_entry,
+            commands::recurrences,
+            commands::create_recurrence,
+            commands::end_recurrence,
+            commands::installment_plans,
+            commands::create_installment_plan,
+            commands::delete_installment_plan,
             commands::dashboard,
         ])
         .run(tauri::generate_context!())

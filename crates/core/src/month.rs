@@ -28,6 +28,12 @@ impl Month {
         NaiveDate::from_ymd_opt(self.year, self.month, 1).expect("mês válido")
     }
 
+    /// O dia `day` deste mês, ou o último dia quando o mês é mais curto.
+    pub fn day(self, day: u32) -> NaiveDate {
+        let last = self.next().first_day().pred_opt().expect("data válida");
+        self.first_day().with_day(day).unwrap_or(last)
+    }
+
     pub fn next(self) -> Self {
         self.plus(1)
     }
@@ -72,4 +78,14 @@ impl From<Month> for String {
     fn from(month: Month) -> String {
         month.to_string()
     }
+}
+
+pub(crate) fn month_col(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<Month>> {
+    let text: Option<String> = row.get(index)?;
+    text.map(|text| {
+        text.parse().map_err(|e: String| {
+            rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, e.into())
+        })
+    })
+    .transpose()
 }

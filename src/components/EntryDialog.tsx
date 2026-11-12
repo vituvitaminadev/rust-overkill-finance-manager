@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { Field, FormError } from "@/components/Field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   NativeSelect,
   NativeSelectOption,
@@ -32,7 +34,13 @@ const KINDS: { kind: EntryKind; label: string }[] = [
   { kind: "income", label: "Receita" },
 ];
 
-/** Cria um lançamento ou, quando recebe `entry`, edita o existente. */
+/** Como um lançamento novo se repete: avulso, por Recorrência ou por Parcelamento. */
+type Repeat = "none" | "monthly" | "installments";
+
+/**
+ * Cria um lançamento (avulso, recorrente ou parcelado) ou, quando recebe
+ * `entry`, edita o existente.
+ */
 export function EntryDialog({
   entry,
   me,
@@ -50,11 +58,20 @@ export function EntryDialog({
   const [description, setDescription] = useState(entry?.description ?? "");
   const [categoryId, setCategoryId] = useState(entry?.categoryId ?? "");
   const [assigneeId, setAssigneeId] = useState(entry?.assigneeId ?? me.id);
-  const [amountError, setAmountError] = useState(false);
+  // Enquanto ninguém marca nada, a situação acompanha a data: futuro é previsto.
+  const [settledChoice, setSettledChoice] = useState<boolean | null>(
+    entry ? entry.status === "settled" : null,
+  );
+  const [repeat, setRepeat] = useState<Repeat>("none");
+  const [endDate, setEndDate] = useState("");
+  const [count, setCount] = useState("2");
+  const [following, setFollowing] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const categories = useCategories();
   const members = useMembers();
   const isAdmin = me.role === "admin";
+  const settled = settledChoice ?? date <= today();
 
   // Uma categoria arquivada só aparece se já for a deste lançamento.
   const options = (categories.data ?? []).filter(
@@ -66,33 +83,65 @@ export function EntryDialog({
     (member) => member.active || member.id === entry?.assigneeId,
   );
 
-  const save = useHouseholdMutation((amountCents: number) => {
-    const input = {
-      kind,
-      amountCents,
-      date,
-      description,
-      categoryId,
-      assigneeId: isAdmin ? assigneeId : null,
-    };
-    return entry ? api.updateEntry(entry.id, input) : api.createEntry(input);
+  const save = useHouseholdMutation(async (amountCents: number) => {
+    const assignee = isAdmin ? assigneeId : null;
+    if (repeat === "monthly") {
+      await api.createRecurrence({
+        kind,
+        amountCents,
+        description,
+        categoryId,
+        assigneeId: assignee,
+        firstDate: date,
+        endMonth: endDate ? endDate.slice(0, 7) : null,
+      });
+    } else if (repeat === "installments") {
+      await api.createInstallmentPlan({
+        description,
+        totalCents: amountCents,
+        count: Number(count),
+        firstDate: date,
+        categoryId,
+        assigneeId: assignee,
+      });
+    } else {
+      const input = {
+        kind,
+        amountCents,
+        date,
+        description,
+        categoryId,
+        assigneeId: assignee,
+        status: settled ? ("settled" as const) : ("planned" as const),
+      };
+      await (entry
+        ? api.updateEntry(entry.id, input, following)
+        : api.createEntry(input));
+    }
   }, onClose);
 
   function changeKind(next: EntryKind) {
     setKind(next);
     setCategoryId("");
+    if (next === "income" && repeat === "installments") setRepeat("none");
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     const amountCents = parseMoney(amount);
-    setAmountError(amountCents === null);
-    if (amountCents !== null) save.mutate(amountCents);
+    if (amountCents === null) {
+      setLocalError("Informe o valor em reais, como 1.234,56.");
+      return;
+    }
+    if (repeat === "installments" && !/^\d+$/.test(count)) {
+      setLocalError("Informe o número de parcelas.");
+      return;
+    }
+    setLocalError(null);
+    save.mutate(amountCents);
   }
 
-  const error = amountError
-    ? "Informe o valor em reais, como 1.234,56."
-    : save.error && errorMessage(save.error);
+  const error = localError ?? (save.error && errorMessage(save.error));
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -124,7 +173,10 @@ export function EntryDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Valor (R$)" htmlFor="entry-amount">
+            <Field
+              label={repeat === "installments" ? "Valor total (R$)" : "Valor (R$)"}
+              htmlFor="entry-amount"
+            >
               <Input
                 id="entry-amount"
                 autoFocus
@@ -134,7 +186,10 @@ export function EntryDialog({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </Field>
-            <Field label="Data" htmlFor="entry-date">
+            <Field
+              label={repeat === "none" ? "Data" : "Primeira data"}
+              htmlFor="entry-date"
+            >
               <Input
                 id="entry-date"
                 type="date"
@@ -187,6 +242,80 @@ export function EntryDialog({
                 ))}
               </NativeSelect>
             </Field>
+          )}
+
+          {!entry && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Repetição" htmlFor="entry-repeat">
+                <NativeSelect
+                  id="entry-repeat"
+                  className="w-full"
+                  value={repeat}
+                  onChange={(e) => setRepeat(e.target.value as Repeat)}
+                >
+                  <NativeSelectOption value="none">Não repete</NativeSelectOption>
+                  <NativeSelectOption value="monthly">Todo mês</NativeSelectOption>
+                  {kind === "expense" && (
+                    <NativeSelectOption value="installments">
+                      Parcelado
+                    </NativeSelectOption>
+                  )}
+                </NativeSelect>
+              </Field>
+              {repeat === "monthly" && (
+                <Field label="Até (opcional)" htmlFor="entry-end">
+                  <Input
+                    id="entry-end"
+                    type="date"
+                    min={date}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </Field>
+              )}
+              {repeat === "installments" && (
+                <Field label="Parcelas" htmlFor="entry-count">
+                  <Input
+                    id="entry-count"
+                    inputMode="numeric"
+                    value={count}
+                    onChange={(e) => setCount(e.target.value)}
+                  />
+                </Field>
+              )}
+            </div>
+          )}
+
+          {repeat === "none" ? (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="entry-settled"
+                checked={settled}
+                onCheckedChange={setSettledChoice}
+              />
+              <Label htmlFor="entry-settled" className="font-normal">
+                Já aconteceu (efetivado)
+              </Label>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {repeat === "monthly"
+                ? "Cada mês entra como previsto, e você efetiva quando acontecer."
+                : "Cada parcela entra como prevista, e você efetiva quando for paga."}
+            </p>
+          )}
+
+          {entry?.recurrenceId && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="entry-following"
+                checked={following}
+                onCheckedChange={setFollowing}
+              />
+              <Label htmlFor="entry-following" className="font-normal">
+                Aplicar também aos próximos previstos desta recorrência
+              </Label>
+            </div>
           )}
 
           <FormError error={error || null} />

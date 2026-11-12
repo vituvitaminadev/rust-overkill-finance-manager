@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { EntryDialog } from "@/components/EntryDialog";
+import { EntryDescription, EntryStatusBadge } from "@/components/EntryLabels";
 import { FormError } from "@/components/Field";
 import { MonthPicker } from "@/components/MonthPicker";
+import { SettleDialog } from "@/components/SettleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +33,7 @@ import {
   errorMessage,
   type Entry,
   type EntryKind,
+  type EntryStatus,
   type Member,
 } from "@/lib/api";
 import { currentMonth, formatDate, formatMoney } from "@/lib/format";
@@ -44,24 +47,29 @@ import {
 export function EntriesView({ me }: { me: Member }) {
   const [month, setMonth] = useState(currentMonth);
   const [kind, setKind] = useState<EntryKind | "">("");
+  const [status, setStatus] = useState<EntryStatus | "">("");
   const [categoryId, setCategoryId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState<Entry | null>(null);
+  const [settling, setSettling] = useState<Entry | null>(null);
 
   const categories = useCategories();
   const members = useMembers();
   const entries = useEntries({
     month,
     kind: kind || null,
+    status: status || null,
     categoryId: categoryId || null,
     assigneeId: assigneeId || null,
     search: search || null,
   });
   const rows = entries.data ?? [];
-  const filtered = Boolean(kind || categoryId || assigneeId || search);
+  const filtered = Boolean(
+    kind || status || categoryId || assigneeId || search,
+  );
 
   return (
     <div className="grid gap-4">
@@ -75,6 +83,15 @@ export function EntriesView({ me }: { me: Member }) {
           <NativeSelectOption value="">Todos os tipos</NativeSelectOption>
           <NativeSelectOption value="expense">Despesas</NativeSelectOption>
           <NativeSelectOption value="income">Receitas</NativeSelectOption>
+        </NativeSelect>
+        <NativeSelect
+          aria-label="Situação"
+          value={status}
+          onChange={(e) => setStatus(e.target.value as EntryStatus | "")}
+        >
+          <NativeSelectOption value="">Todas as situações</NativeSelectOption>
+          <NativeSelectOption value="planned">Previstos</NativeSelectOption>
+          <NativeSelectOption value="settled">Efetivados</NativeSelectOption>
         </NativeSelect>
         <NativeSelect
           aria-label="Categoria"
@@ -138,8 +155,9 @@ export function EntriesView({ me }: { me: Member }) {
                 <TableHead>Categoria</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead>Tipo</TableHead>
+                <TableHead>Situação</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="w-20" />
+                <TableHead className="w-28" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -148,8 +166,8 @@ export function EntriesView({ me }: { me: Member }) {
                   <TableCell className="tabular-nums">
                     {formatDate(entry.date)}
                   </TableCell>
-                  <TableCell className="max-w-64 truncate">
-                    {entry.description}
+                  <TableCell className="max-w-64">
+                    <EntryDescription entry={entry} />
                   </TableCell>
                   <TableCell>{entry.categoryName}</TableCell>
                   <TableCell>{entry.assigneeName}</TableCell>
@@ -160,6 +178,9 @@ export function EntriesView({ me }: { me: Member }) {
                       {entry.kind === "income" ? "Receita" : "Despesa"}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    <EntryStatusBadge entry={entry} />
+                  </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {entry.kind === "expense" ? "−" : "+"}
                     {formatMoney(entry.amountCents)}
@@ -167,6 +188,17 @@ export function EntriesView({ me }: { me: Member }) {
                   <TableCell className="text-right">
                     {entry.canEdit && (
                       <>
+                        {entry.status === "planned" && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Efetivar ${entry.description}`}
+                            title="Efetivar"
+                            onClick={() => setSettling(entry)}
+                          >
+                            <CheckIcon />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -203,6 +235,9 @@ export function EntriesView({ me }: { me: Member }) {
       )}
       {deleting && (
         <DeleteDialog entry={deleting} onClose={() => setDeleting(null)} />
+      )}
+      {settling && (
+        <SettleDialog entry={settling} onClose={() => setSettling(null)} />
       )}
     </div>
   );

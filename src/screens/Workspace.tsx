@@ -6,10 +6,12 @@ import { useSessionAction } from "@/lib/session";
 import { CategoriesView } from "./CategoriesView";
 import { DashboardView } from "./DashboardView";
 import { EntriesView } from "./EntriesView";
+import { PlanningView } from "./PlanningView";
 
 const TABS = [
   { id: "dashboard", label: "Resumo" },
   { id: "entries", label: "Lançamentos" },
+  { id: "planning", label: "Recorrências e parcelas" },
   { id: "categories", label: "Categorias" },
 ] as const;
 
@@ -63,6 +65,7 @@ export function Workspace({
       <main className="mx-auto max-w-6xl p-4">
         {tab === "dashboard" && <DashboardView me={me} />}
         {tab === "entries" && <EntriesView me={me} />}
+        {tab === "planning" && <PlanningView />}
         {tab === "categories" && <CategoriesView me={me} />}
       </main>
     </div>

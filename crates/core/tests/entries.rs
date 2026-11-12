@@ -1,7 +1,7 @@
 mod common;
 
 use common::{day, fixture};
-use finance_core::{EntryFilter, EntryInput, EntryKind, Error, Month};
+use finance_core::{EntryFilter, EntryInput, EntryKind, EntryStatus, Error, Month};
 
 #[test]
 fn entry_is_assigned_to_whoever_created_it() {
@@ -337,4 +337,145 @@ fn search_ignores_case_including_accented_letters() {
 
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].description, "Conta de Água");
+}
+
+#[test]
+fn new_entry_is_planned_when_dated_in_the_future_and_settled_otherwise() {
+    let f = fixture();
+
+    let yesterday = f.expense(&f.admin, 100, "2026-11-10", "Mercado");
+    let today = f.expense(&f.admin, 100, "2026-11-11", "Mercado");
+    let tomorrow = f.expense(&f.admin, 100, "2026-11-12", "Mercado");
+
+    assert_eq!(yesterday.status, EntryStatus::Settled);
+    assert_eq!(today.status, EntryStatus::Settled);
+    assert_eq!(tomorrow.status, EntryStatus::Planned);
+    assert!(!tomorrow.overdue);
+}
+
+#[test]
+fn status_can_be_chosen_explicitly() {
+    let f = fixture();
+
+    let planned_in_the_past = f
+        .household
+        .create_entry(
+            f.admin.id,
+            EntryInput {
+                status: Some(EntryStatus::Planned),
+                ..f.expense_input(100, "2026-11-01", "Mercado")
+            },
+        )
+        .unwrap();
+
+    assert_eq!(planned_in_the_past.status, EntryStatus::Planned);
+    assert!(planned_in_the_past.overdue);
+}
+
+#[test]
+fn planned_entry_becomes_overdue_instead_of_settling_itself() {
+    let f = fixture();
+    let entry = f.expense(&f.admin, 20_000, "2026-11-15", "Contas e serviços");
+
+    f.clock.advance(chrono::Duration::days(4));
+    let due_today = f
+        .household
+        .entries(f.admin.id, &Default::default())
+        .unwrap();
+    f.clock.advance(chrono::Duration::days(1));
+    let day_after = f
+        .household
+        .entries(f.admin.id, &Default::default())
+        .unwrap();
+
+    assert_eq!(due_today[0].id, entry.id);
+    assert!(!due_today[0].overdue);
+    assert_eq!(day_after[0].status, EntryStatus::Planned);
+    assert!(day_after[0].overdue);
+}
+
+#[test]
+fn settling_records_the_real_amount() {
+    let f = fixture();
+    let bill = f.expense(&f.admin, 20_000, "2026-11-15", "Contas e serviços");
+    let rent = f.expense(&f.admin, 150_000, "2026-11-20", "Moradia");
+
+    let bill = f
+        .household
+        .settle_entry(f.admin.id, bill.id, Some(23_100))
+        .unwrap();
+    let rent = f.household.settle_entry(f.admin.id, rent.id, None).unwrap();
+
+    assert_eq!(bill.status, EntryStatus::Settled);
+    assert_eq!(bill.amount_cents, 23_100);
+    assert!(!bill.overdue);
+    assert_eq!(bill.version, 2);
+    assert_eq!(rent.amount_cents, 150_000);
+    assert!(matches!(
+        f.household.settle_entry(f.admin.id, rent.id, Some(0)),
+        Err(Error::Invalid(_))
+    ));
+}
+
+#[test]
+fn common_member_cannot_settle_entries_of_others() {
+    let f = fixture();
+    let ana = f.join("ana");
+    let entry = f.expense(&f.admin, 100, "2026-11-20", "Mercado");
+
+    assert!(matches!(
+        f.household.settle_entry(ana.id, entry.id, None),
+        Err(Error::Forbidden)
+    ));
+}
+
+#[test]
+fn editing_keeps_the_status_unless_told_otherwise() {
+    let f = fixture();
+    let entry = f.expense(&f.admin, 100, "2026-11-20", "Mercado");
+
+    let moved = f
+        .household
+        .update_entry(
+            f.admin.id,
+            entry.id,
+            f.expense_input(100, "2026-11-05", "Mercado"),
+        )
+        .unwrap();
+    let settled = f
+        .household
+        .update_entry(
+            f.admin.id,
+            entry.id,
+            EntryInput {
+                status: Some(EntryStatus::Settled),
+                ..f.expense_input(100, "2026-11-05", "Mercado")
+            },
+        )
+        .unwrap();
+
+    assert_eq!(moved.status, EntryStatus::Planned);
+    assert!(moved.overdue);
+    assert_eq!(settled.status, EntryStatus::Settled);
+}
+
+#[test]
+fn entries_can_be_filtered_by_status() {
+    let f = fixture();
+    f.expense(&f.admin, 1, "2026-11-10", "Mercado");
+    f.expense(&f.admin, 2, "2026-11-20", "Mercado");
+
+    let planned = f
+        .household
+        .entries(
+            f.admin.id,
+            &EntryFilter {
+                status: Some(EntryStatus::Planned),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(planned.len(), 1);
+    assert_eq!(planned[0].amount_cents, 2);
 }
