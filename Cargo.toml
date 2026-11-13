@@ -13,6 +13,3 @@ strip = true
 # Argon2 sem otimização deixa cada login de teste levando segundos.
 [profile.dev.package.argon2]
 opt-level = 3
-
-[profile.dev.package.blake2]
-opt-level = 3

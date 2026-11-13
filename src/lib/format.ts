@@ -71,15 +71,3 @@ export function monthShortLabel(month: string): string {
   const label = shortMonth.format(new Date(`${month}-01T00:00:00Z`));
   return label.replace(". de ", "/").replace(" de ", "/").replace(".", "");
 }
-
-const dateTime = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** Um instante em ISO vira "13/11, 20:15", no horário deste computador. */
-export function formatDateTime(iso: string): string {
-  return dateTime.format(new Date(iso));
-}

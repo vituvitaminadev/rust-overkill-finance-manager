@@ -15,8 +15,8 @@ Uma pessoa com credenciais de acesso, que pode pertencer a várias residências.
 _Avoid_: Conta, login
 
 **Membro**:
-Um usuário dentro de uma residência específica, com papel de Administrador ou Comum.
-_Avoid_: Participante, morador
+Uma pessoa dentro de uma residência específica, com papel de Administrador ou Comum. Na interface aparece como "participante". Pode não ter senha: nesse caso é só alguém a quem lançamentos são atribuídos, e não entra no app.
+_Avoid_: Morador
 
 **Administrador**:
 Membro que pode vincular lançamentos a qualquer membro da residência; quem cria a residência é o primeiro.
@@ -69,6 +69,8 @@ O membro ao qual um lançamento está vinculado, que não é necessariamente que
 _Avoid_: Dono, autor, criador
 
 ### Compartilhamento
+
+Termos da sincronização entre computadores, engavetada (ADR 0003).
 
 **Anfitrião**:
 A única instância do app que hospeda uma residência, na máquina onde ela foi criada, e é a fonte da verdade dos seus dados.

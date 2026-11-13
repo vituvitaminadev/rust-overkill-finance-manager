@@ -184,3 +184,65 @@ fn token_identifies_the_member_it_was_issued_to() {
         Err(Error::InvalidSession)
     ));
 }
+
+#[test]
+fn admin_adds_a_participant_who_does_not_log_in() {
+    let f = fixture();
+
+    let bia = f.household.add_member(f.admin.id, " bia ").unwrap();
+    let entry = f
+        .household
+        .create_entry(
+            f.admin.id,
+            finance_core::EntryInput {
+                assignee_id: Some(bia.id),
+                ..f.expense_input(4_500, "2026-11-10", "Mercado")
+            },
+        )
+        .unwrap();
+
+    assert_eq!(bia.username, "bia");
+    assert_eq!(bia.role, Role::Common);
+    assert_eq!(entry.assignee_name, "bia");
+    // Sem senha definida, nenhuma senha serve, nem a vazia.
+    for attempt in ["", PASSWORD] {
+        assert!(matches!(
+            f.household.authenticate("bia", attempt),
+            Err(Error::InvalidCredentials)
+        ));
+    }
+}
+
+#[test]
+fn participant_can_log_in_once_an_admin_sets_a_password() {
+    let f = fixture();
+    let bia = f.household.add_member(f.admin.id, "bia").unwrap();
+
+    f.household
+        .reset_password(f.admin.id, bia.id, "senha-da-bia")
+        .unwrap();
+
+    assert_eq!(
+        f.household.authenticate("bia", "senha-da-bia").unwrap(),
+        bia
+    );
+}
+
+#[test]
+fn participants_need_a_unique_name_and_an_admin_to_add_them() {
+    let f = fixture();
+    let ana = f.join("ana");
+
+    assert!(matches!(
+        f.household.add_member(f.admin.id, "ANA"),
+        Err(Error::UsernameTaken)
+    ));
+    assert!(matches!(
+        f.household.add_member(f.admin.id, "  "),
+        Err(Error::Invalid(_))
+    ));
+    assert!(matches!(
+        f.household.add_member(ana.id, "bia"),
+        Err(Error::Forbidden)
+    ));
+}

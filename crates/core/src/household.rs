@@ -352,7 +352,13 @@ pub(crate) fn hash_password(password: &str) -> Result<String> {
         .to_string())
 }
 
+/// O que fica no lugar do hash de quem não tem senha e por isso não entra no app.
+pub(crate) const NO_PASSWORD: &str = "";
+
 pub(crate) fn password_matches(hash: &str, password: &str) -> Result<bool> {
+    if hash == NO_PASSWORD {
+        return Ok(false);
+    }
     let hash = PasswordHash::new(hash).map_err(|e| Error::PasswordHash(e.to_string()))?;
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &hash)

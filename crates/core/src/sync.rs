@@ -140,6 +140,7 @@ pub enum HostCommand {
     CreateInvite,
     Invites,
     RevokeInvite { id: Uuid },
+    AddMember { name: String },
     SetMemberRole { id: MemberId, role: Role },
     RemoveMember { id: MemberId },
     ResetPassword { id: MemberId, password: String },
@@ -174,6 +175,7 @@ impl Household {
             HostCommand::CreateInvite => json(self.create_invite(actor)?),
             HostCommand::Invites => json(self.invites(actor)?),
             HostCommand::RevokeInvite { id } => json(self.revoke_invite(actor, id)?),
+            HostCommand::AddMember { name } => json(self.add_member(actor, &name)?),
             HostCommand::SetMemberRole { id, role } => json(self.set_member_role(actor, id, role)?),
             HostCommand::RemoveMember { id } => json(self.remove_member(actor, id)?),
             HostCommand::ResetPassword { id, password } => {

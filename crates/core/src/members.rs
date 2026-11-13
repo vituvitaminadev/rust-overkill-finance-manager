@@ -6,7 +6,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::household::{Role, hash_password, password_matches, uuid_col};
+use crate::household::{NO_PASSWORD, Role, hash_password, password_matches, uuid_col};
 use crate::{Error, Household, Member, MemberId, Result};
 
 /// Um Convite ainda utilizável: nem usado, nem revogado, nem expirado.
@@ -51,6 +51,39 @@ impl Household {
             return Err(Error::NotFound);
         }
         Ok(())
+    }
+
+    /// Acrescenta à residência alguém que não entra no app: um participante a
+    /// quem os lançamentos podem ser atribuídos. Sem senha, ninguém entra em
+    /// nome dele até que um Administrador defina uma.
+    pub fn add_member(&self, actor: MemberId, name: &str) -> Result<Member> {
+        self.host_only()?;
+        self.admin(actor)?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(Error::invalid("Informe o nome do participante."));
+        }
+        let taken: bool = self.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM member WHERE username = ?1)",
+            [name],
+            |row| row.get(0),
+        )?;
+        if taken {
+            return Err(Error::UsernameTaken);
+        }
+        let id = Uuid::new_v4();
+        self.conn.execute(
+            "INSERT INTO member (id, user_id, username, password_hash, role, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'common', ?5)",
+            params![
+                id.to_string(),
+                Uuid::new_v4().to_string(),
+                name,
+                NO_PASSWORD,
+                self.clock.now()
+            ],
+        )?;
+        self.member(id)
     }
 
     pub fn set_member_role(&self, actor: MemberId, id: MemberId, role: Role) -> Result<Member> {

@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,24 +19,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api, errorMessage, type Member } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
-import {
-  useHouseholdMutation,
-  useInvites,
-  useMembers,
-  useSyncInfo,
-} from "@/lib/queries";
+import { useHouseholdMutation, useMembers } from "@/lib/queries";
 
-/** Quem faz parte da residência, os convites em aberto e a senha de quem está usando. */
+/** Quem faz parte da residência e a senha de quem está usando o app. */
 export function MembersView({ me }: { me: Member }) {
-  const isAdmin = me.role === "admin";
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <MembersCard me={me} />
-      <div className="grid gap-4">
-        {isAdmin && <InvitesCard />}
-        <PasswordCard />
-      </div>
+      <PasswordCard />
     </div>
   );
 }
@@ -47,20 +36,30 @@ function MembersCard({ me }: { me: Member }) {
   const isAdmin = me.role === "admin";
   const [resetting, setResetting] = useState<Member | null>(null);
   const [removing, setRemoving] = useState<Member | null>(null);
+  const [name, setName] = useState("");
+  const add = useHouseholdMutation(
+    () => api.addMember(name),
+    () => setName(""),
+  );
   const setRole = useHouseholdMutation((member: Member) =>
     api.setMemberRole(member.id, member.role === "admin" ? "common" : "admin"),
   );
-  const error = members.error ?? setRole.error;
+  const error = members.error ?? setRole.error ?? add.error;
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    add.mutate(undefined);
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Membros</CardTitle>
-        {!isAdmin && (
-          <CardDescription>
-            Só administradores convidam, promovem e removem membros.
-          </CardDescription>
-        )}
+        <CardTitle>Participantes</CardTitle>
+        <CardDescription>
+          {isAdmin
+            ? "Cada participante pode ser o responsável por lançamentos. Só entra no app quem tiver uma senha definida."
+            : "Só administradores adicionam, promovem e removem participantes."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         <ul className="divide-y text-sm">
@@ -90,7 +89,7 @@ function MembersCard({ me }: { me: Member }) {
                   {member.id !== me.id && (
                     <>
                       <Button variant="ghost" size="sm" onClick={() => setResetting(member)}>
-                        Redefinir senha
+                        Definir senha
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setRemoving(member)}>
                         Remover
@@ -102,6 +101,19 @@ function MembersCard({ me }: { me: Member }) {
             </li>
           ))}
         </ul>
+        {isAdmin && (
+          <form onSubmit={submit} className="flex gap-2">
+            <Input
+              aria-label="Nome do novo participante"
+              placeholder="Nome do novo participante"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" variant="outline" disabled={add.isPending}>
+              Adicionar
+            </Button>
+          </form>
+        )}
         <FormError error={error && errorMessage(error)} />
       </CardContent>
       {resetting && (
@@ -129,10 +141,10 @@ function ResetPasswordDialog({ member, onClose }: { member: Member; onClose: () 
       <DialogContent>
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Redefinir a senha de {member.username}</DialogTitle>
+            <DialogTitle>Definir a senha de {member.username}</DialogTitle>
             <DialogDescription>
-              Combine a nova senha com a pessoa. Ela pode trocá-la depois, em
-              Membros.
+Com uma senha, {member.username} passa a poder entrar no app. A
+              pessoa pode trocá-la depois, em Participantes.
             </DialogDescription>
           </DialogHeader>
           <Field label="Nova senha (mínimo de 8 caracteres)" htmlFor="reset-password">
@@ -151,7 +163,7 @@ function ResetPasswordDialog({ member, onClose }: { member: Member; onClose: () 
               Cancelar
             </Button>
             <Button type="submit" disabled={reset.isPending}>
-              Redefinir
+              Definir
             </Button>
           </DialogFooter>
         </form>
@@ -187,74 +199,6 @@ function RemoveDialog({ member, onClose }: { member: Member; onClose: () => void
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function InvitesCard() {
-  const invites = useInvites(true);
-  const sync = useSyncInfo().data;
-  const create = useHouseholdMutation(() => api.createInvite());
-  const revoke = useHouseholdMutation((id: string) => api.revokeInvite(id));
-  const error = invites.error ?? create.error ?? revoke.error;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Convites</CardTitle>
-        <CardDescription>
-          Cada convite serve para uma pessoa entrar, uma única vez, em até 24
-          horas.
-        </CardDescription>
-        <CardAction>
-          <Button disabled={create.isPending} onClick={() => create.mutate(undefined)}>
-            Gerar convite
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {sync?.securityCode && (
-          <div className="grid gap-0.5 rounded-lg bg-muted/50 p-3 text-sm">
-            <span>
-              Código de segurança:{" "}
-              <strong className="font-mono">{sync.securityCode}</strong>
-            </span>
-            {sync.address && (
-              <span>
-                Endereço deste Anfitrião:{" "}
-                <strong className="font-mono">{sync.address}</strong>
-              </span>
-            )}
-            <span className="text-muted-foreground">
-              Quem entra deve ver este mesmo código de segurança antes de digitar
-              o convite.
-            </span>
-          </div>
-        )}
-        {invites.data?.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nenhum convite em aberto.</p>
-        )}
-        <ul className="divide-y text-sm">
-          {(invites.data ?? []).map((invite) => (
-            <li key={invite.id} className="flex min-h-11 items-center gap-3 py-1">
-              <strong className="font-mono text-base tracking-wider">{invite.code}</strong>
-              <span className="text-muted-foreground">
-                vale até {formatDateTime(invite.expiresAt)}
-              </span>
-              <Button
-                className="ml-auto"
-                variant="ghost"
-                size="sm"
-                disabled={revoke.isPending}
-                onClick={() => revoke.mutate(invite.id)}
-              >
-                Revogar
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <FormError error={error && errorMessage(error)} />
-      </CardContent>
-    </Card>
   );
 }
 

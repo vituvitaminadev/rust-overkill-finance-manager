@@ -142,71 +142,10 @@ export interface Status {
   current: {
     household: HouseholdInfo;
     member: Member;
-    /** Verdadeiro quando esta máquina tem só uma cópia e o Anfitrião é outra. */
-    replica: boolean;
   } | null;
 }
 
-/** Um Anfitrião anunciado na rede local. */
-export interface DiscoveredHost {
-  householdId: string;
-  name: string;
-  address: string;
-}
-
-export interface HostPreview {
-  household: HouseholdInfo;
-  fingerprint: string;
-  /** O código a conferir nos dois computadores antes de confiar. */
-  securityCode: string;
-}
-
-export type LinkState =
-  | "online"
-  | "offline"
-  | "protocol_mismatch"
-  | "unauthorized";
-
-export interface SyncInfo {
-  replica: boolean;
-  link: LinkState | null;
-  pending: number;
-  conflicts: number;
-  connected: number;
-  address: string | null;
-  securityCode: string | null;
-}
-
-export interface ConflictSide {
-  kind: EntryKind;
-  amountCents: number;
-  date: string;
-  description: string;
-  categoryName: string;
-  assigneeName: string;
-  status: EntryStatus;
-}
-
-export interface Conflict {
-  entryId: string;
-  /** Ausente se o lançamento foi excluído neste computador. */
-  mine: ConflictSide | null;
-  /** Ausente se o Anfitrião não tem, ou excluiu, o lançamento. */
-  theirs: ConflictSide | null;
-  /** Presente quando o Anfitrião recusou a alteração. */
-  reason: string | null;
-}
-
-export interface Invite {
-  id: string;
-  code: string;
-  expiresAt: string;
-}
-
-/**
- * Executa o que só o Anfitrião pode fazer. Numa cópia, o pedido vai pela rede
- * e falha se o Anfitrião estiver fora de alcance.
- */
+/** Executa um comando que mexe na estrutura da residência. */
 function host<T>(command: string, args?: unknown): Promise<T> {
   return invoke<T>("host_command", { command: { command, args } });
 }
@@ -225,24 +164,8 @@ export const api = {
   selectHousehold: (id: string) => invoke<Status>("select_household", { id }),
   closeHousehold: () => invoke<Status>("close_household"),
 
-  discover: () => invoke<DiscoveredHost[]>("discover"),
-  inspectHost: (address: string) =>
-    invoke<HostPreview>("inspect_host", { address }),
-  joinHousehold: (args: {
-    address: string;
-    fingerprint: string;
-    code: string;
-    username: string;
-    password: string;
-    remember: boolean;
-  }) => invoke<Status>("join_household", args),
-
-  syncInfo: () => invoke<SyncInfo>("sync_info"),
-  conflicts: () => invoke<Conflict[]>("conflicts"),
-  resolveConflict: (entryId: string, keepMine: boolean) =>
-    invoke<void>("resolve_conflict", { entryId, keepMine }),
-
   members: () => invoke<Member[]>("members"),
+  addMember: (name: string) => host<Member>("add_member", { name }),
   setMemberRole: (id: string, role: Role) =>
     host<Member>("set_member_role", { id, role }),
   removeMember: (id: string) => host<void>("remove_member", { id }),
@@ -250,9 +173,6 @@ export const api = {
     host<void>("reset_password", { id, password }),
   changePassword: (current: string, next: string) =>
     host<void>("change_password", { current, new: next }),
-  invites: () => host<Invite[]>("invites"),
-  createInvite: () => host<Invite>("create_invite"),
-  revokeInvite: (id: string) => host<void>("revoke_invite", { id }),
 
   categories: () => invoke<Category[]>("categories"),
   createCategory: (input: { name: string; kind: EntryKind }) =>

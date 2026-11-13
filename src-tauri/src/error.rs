@@ -21,15 +21,3 @@ impl From<finance_core::Error> for CommandError {
         CommandError::new(error.code(), &error.to_string())
     }
 }
-
-impl From<finance_server::LinkError> for CommandError {
-    fn from(error: finance_server::LinkError) -> Self {
-        CommandError::new(error.code(), &error.to_string())
-    }
-}
-
-impl From<finance_server::PairingError> for CommandError {
-    fn from(error: finance_server::PairingError) -> Self {
-        CommandError::new(error.code(), &error.to_string())
-    }
-}

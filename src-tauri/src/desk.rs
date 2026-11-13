@@ -1,7 +1,6 @@
 //! O estado do app nesta máquina: quem está conectado, de quais residências
 //! locais essa pessoa é membro e qual delas está aberta.
 
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -38,7 +37,6 @@ struct Membership {
 struct OpenHousehold {
     household: Household,
     info: HouseholdInfo,
-    path: PathBuf,
     member_id: MemberId,
 }
 
@@ -57,25 +55,6 @@ pub struct Status {
 struct Current {
     household: HouseholdInfo,
     member: Member,
-    /// Verdadeiro quando esta máquina tem só uma cópia e o Anfitrião é outra.
-    replica: bool,
-}
-
-/// O que a rede precisa saber da residência aberta.
-pub struct OpenDetails {
-    pub path: PathBuf,
-    pub household: HouseholdId,
-    pub member: MemberId,
-    pub replica: bool,
-    /// Na cópia, o último endereço em que o Anfitrião foi encontrado.
-    pub host_address: Option<SocketAddr>,
-}
-
-/// Uma cópia em que o membro conectado ainda não tem credencial para sincronizar.
-pub struct MissingCredentials {
-    pub path: PathBuf,
-    pub household: HouseholdId,
-    pub host_address: Option<SocketAddr>,
 }
 
 impl Desk {
@@ -98,7 +77,6 @@ impl Desk {
             Some(open) => Some(Current {
                 household: open.info.clone(),
                 member: open.household.member(open.member_id)?,
-                replica: open.household.is_replica(),
             }),
             None => None,
         };
@@ -147,8 +125,7 @@ impl Desk {
         remember::clear();
     }
 
-    /// Cria uma residência nesta máquina, que passa a ser o Anfitrião dela, e
-    /// já a abre. Devolve o arquivo criado.
+    /// Cria uma residência nesta máquina e já a abre.
     ///
     /// Quem está conectado leva o próprio usuário; na primeira abertura,
     /// `new_user` traz o usuário e a senha a criar.
@@ -157,7 +134,7 @@ impl Desk {
         name: String,
         new_user: Option<(String, String)>,
         remember: bool,
-    ) -> Result<PathBuf> {
+    ) -> Result<()> {
         let user = match (&self.identity, new_user) {
             (Some(identity), _) => {
                 // Qualquer residência de quem está conectado serve de origem.
@@ -176,7 +153,7 @@ impl Desk {
             (None, None) => return Err(no_session()),
         };
 
-        let path = self.new_file();
+        let path = self.dir.join(format!("{}.db", Uuid::new_v4()));
         let created = Connection::open(&path)
             .map_err(finance_core::Error::from)
             .and_then(|conn| {
@@ -190,18 +167,6 @@ impl Desk {
                 return Err(error.into());
             }
         };
-        self.enter(household, path.clone(), member, remember)?;
-        Ok(path)
-    }
-
-    /// Onde gravar a próxima residência desta máquina.
-    pub fn new_file(&self) -> PathBuf {
-        self.dir.join(format!("{}.db", Uuid::new_v4()))
-    }
-
-    /// Passa a usar a cópia recém-pareada em `path`, já aberta em nome de `member`.
-    pub fn adopt(&mut self, path: PathBuf, member: Member, remember: bool) -> Result<()> {
-        let household = open(&path)?;
         self.enter(household, path, member, remember)
     }
 
@@ -220,13 +185,12 @@ impl Desk {
         });
         identity.memberships.push(Membership {
             household: info.clone(),
-            path: path.clone(),
+            path,
             member_id: member.id,
         });
         self.open = Some(OpenHousehold {
             household,
             info,
-            path,
             member_id: member.id,
         });
         self.persist_identity();
@@ -243,7 +207,6 @@ impl Desk {
         self.open = Some(OpenHousehold {
             household: open(&membership.path)?,
             info: membership.household.clone(),
-            path: membership.path.clone(),
             member_id: membership.member_id,
         });
         Ok(())
@@ -257,44 +220,6 @@ impl Desk {
     pub fn current(&self) -> Result<(&Household, MemberId)> {
         let open = self.open.as_ref().ok_or_else(no_session)?;
         Ok((&open.household, open.member_id))
-    }
-
-    pub fn open_details(&self) -> Option<OpenDetails> {
-        let open = self.open.as_ref()?;
-        Some(OpenDetails {
-            path: open.path.clone(),
-            household: open.info.id,
-            member: open.member_id,
-            replica: open.household.is_replica(),
-            host_address: finance_server::stored_address(&open.household),
-        })
-    }
-
-    /// As residências desta máquina de que ela é o Anfitrião.
-    pub fn hosted_files(&self) -> Vec<PathBuf> {
-        self.household_files()
-            .into_iter()
-            .filter(|path| open(path).is_ok_and(|household| !household.is_replica()))
-            .collect()
-    }
-
-    /// As cópias em que quem está conectado é membro mas ainda não pode
-    /// sincronizar, por ter sido outra pessoa a parear este computador.
-    pub fn missing_credentials(&self) -> Vec<MissingCredentials> {
-        self.identity
-            .iter()
-            .flat_map(|identity| &identity.memberships)
-            .filter_map(|membership| {
-                let household = open(&membership.path).ok()?;
-                let missing = household.is_replica()
-                    && !finance_server::has_credentials(&household, membership.member_id);
-                missing.then(|| MissingCredentials {
-                    path: membership.path.clone(),
-                    household: membership.household.id,
-                    host_address: finance_server::stored_address(&household),
-                })
-            })
-            .collect()
     }
 
     fn household_files(&self) -> Vec<PathBuf> {

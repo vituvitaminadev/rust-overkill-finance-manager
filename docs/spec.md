@@ -1,5 +1,7 @@
 # Spec: Finanças da Residência (v1)
 
+> **Escopo revisto.** O app é usado em um único computador ([ADR 0003](adr/0003-um-computador-so.md)). As histórias sobre Anfitrião, Convite, sincronização, Conflito e operação em rede (12 a 18, 67 a 88) estão engavetadas.
+
 Vocabulário em [GLOSSARY.md](../GLOSSARY.md). Decisões de arquitetura em [ADR 0001](adr/0001-sincronizacao-por-versao-com-anfitriao-fixo.md) e [ADR 0002](adr/0002-tls-autoassinado-fixado-no-convite.md).
 
 ## Problem Statement
