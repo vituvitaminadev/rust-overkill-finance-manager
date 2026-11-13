@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { SyncBadge } from "@/components/SyncBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, type HouseholdInfo, type Member } from "@/lib/api";
+import { useLiveHousehold } from "@/lib/queries";
 import { useSessionAction } from "@/lib/session";
 import { CategoriesView } from "./CategoriesView";
 import { DashboardView } from "./DashboardView";
 import { EntriesView } from "./EntriesView";
+import { MembersView } from "./MembersView";
 import { PlanningView } from "./PlanningView";
 
 const TABS = [
@@ -13,6 +16,7 @@ const TABS = [
   { id: "entries", label: "Lançamentos" },
   { id: "planning", label: "Recorrências e parcelas" },
   { id: "categories", label: "Categorias" },
+  { id: "members", label: "Membros" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -28,6 +32,7 @@ export function Workspace({
   const [tab, setTab] = useState<TabId>("dashboard");
   const close = useSessionAction(api.closeHousehold);
   const logout = useSessionAction(api.logout);
+  useLiveHousehold();
 
   return (
     <div className="min-h-screen">
@@ -48,7 +53,8 @@ export function Workspace({
               </Button>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2 text-sm">
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
+            <SyncBadge />
             <span>{me.username}</span>
             <Badge variant="secondary">
               {me.role === "admin" ? "Administrador" : "Comum"}
@@ -67,6 +73,7 @@ export function Workspace({
         {tab === "entries" && <EntriesView me={me} />}
         {tab === "planning" && <PlanningView />}
         {tab === "categories" && <CategoriesView me={me} />}
+        {tab === "members" && <MembersView me={me} />}
       </main>
     </div>
   );

@@ -16,4 +16,7 @@ pub use client::ClientError;
 pub use host::HostServer;
 pub use identity::security_code;
 pub use link::{LinkConfig, LinkError, LinkEvent, LinkState, ReplicaLink};
-pub use pairing::{HostInfo, PairingError, inspect, join, sign_in};
+pub use pairing::{
+    HostInfo, PairingError, has_credentials, inspect, join, sign_in, stored_address,
+    stored_fingerprint,
+};

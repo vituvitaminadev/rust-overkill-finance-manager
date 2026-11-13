@@ -74,6 +74,14 @@ _Avoid_: Dono, autor, criador
 A única instância do app que hospeda uma residência, na máquina onde ela foi criada, e é a fonte da verdade dos seus dados.
 _Avoid_: Server, host, ADM
 
+**Cópia**:
+Uma instância do app em outro computador, que guarda a residência inteira e a mantém em dia com o Anfitrião.
+_Avoid_: Cliente, réplica, espelho
+
+**Código de segurança**:
+Um código curto, derivado da identidade do Anfitrião, exibido nos dois computadores durante o pareamento para confirmar que a Cópia está falando com o Anfitrião certo.
+_Avoid_: PIN, senha do servidor
+
 **Conflito**:
 A situação em que o mesmo registro foi alterado em duas cópias diferentes entre duas sincronizações.
 _Avoid_: Divergência

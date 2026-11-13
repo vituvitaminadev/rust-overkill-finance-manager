@@ -13,20 +13,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, errorMessage } from "@/lib/api";
 import { useSessionAction } from "@/lib/session";
+import { JoinForm } from "./JoinForm";
 
 /** Entrada no app: login, ou a criação da primeira residência desta máquina. */
 export function AuthScreen({ hasHouseholds }: { hasHouseholds: boolean }) {
-  const [mode, setMode] = useState<"login" | "create">(
-    hasHouseholds ? "login" : "create",
-  );
+  const home = hasHouseholds ? "login" : "create";
+  const [mode, setMode] = useState<"login" | "create" | "join">(home);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
-        {mode === "login" ? (
-          <LoginForm onCreate={() => setMode("create")} />
-        ) : (
-          <CreateForm onLogin={hasHouseholds ? () => setMode("login") : null} />
+        {mode === "login" && (
+          <LoginForm
+            onCreate={() => setMode("create")}
+            onJoin={() => setMode("join")}
+          />
+        )}
+        {mode === "create" && (
+          <CreateForm
+            onLogin={hasHouseholds ? () => setMode("login") : null}
+            onJoin={() => setMode("join")}
+          />
+        )}
+        {mode === "join" && (
+          <>
+            <CardHeader>
+              <CardTitle>Entrar com convite</CardTitle>
+              <CardDescription>
+                Para participar de uma residência hospedada em outro computador.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <JoinForm onCancel={() => setMode(home)} />
+            </CardContent>
+          </>
         )}
       </Card>
     </main>
@@ -50,7 +70,13 @@ function RememberMe({
   );
 }
 
-function LoginForm({ onCreate }: { onCreate: () => void }) {
+function LoginForm({
+  onCreate,
+  onJoin,
+}: {
+  onCreate: () => void;
+  onJoin: () => void;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -95,13 +121,22 @@ function LoginForm({ onCreate }: { onCreate: () => void }) {
           <Button type="button" variant="ghost" onClick={onCreate}>
             Criar uma residência com outro usuário
           </Button>
+          <Button type="button" variant="ghost" onClick={onJoin}>
+            Entrar com convite
+          </Button>
         </form>
       </CardContent>
     </>
   );
 }
 
-function CreateForm({ onLogin }: { onLogin: (() => void) | null }) {
+function CreateForm({
+  onLogin,
+  onJoin,
+}: {
+  onLogin: (() => void) | null;
+  onJoin: () => void;
+}) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -172,6 +207,9 @@ function CreateForm({ onLogin }: { onLogin: (() => void) | null }) {
           <FormError error={error || null} />
           <Button type="submit" disabled={create.isPending}>
             Criar residência
+          </Button>
+          <Button type="button" variant="ghost" onClick={onJoin}>
+            Entrar com convite em uma residência existente
           </Button>
           {onLogin && (
             <Button type="button" variant="ghost" onClick={onLogin}>

@@ -162,3 +162,18 @@ async fn session(client: &mut Client, request: Request) -> Result<(String, Membe
         _ => Err(ClientError::Unreachable),
     }
 }
+
+/// O último endereço em que esta cópia falou com o seu Anfitrião.
+pub fn stored_address(household: &Household) -> Option<SocketAddr> {
+    household.local(HOST_ADDRESS).ok()??.parse().ok()
+}
+
+/// A impressão digital do Anfitrião com que esta cópia foi pareada.
+pub fn stored_fingerprint(household: &Household) -> Option<String> {
+    household.local(HOST_FINGERPRINT).ok()?
+}
+
+/// Se esta cópia já tem a credencial para falar em nome do membro.
+pub fn has_credentials(household: &Household, member: MemberId) -> bool {
+    matches!(household.local(&token_key(member)), Ok(Some(_)))
+}

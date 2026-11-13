@@ -16,13 +16,6 @@ export interface Member {
   active: boolean;
 }
 
-export interface Status {
-  hasHouseholds: boolean;
-  username: string | null;
-  households: HouseholdInfo[];
-  current: { household: HouseholdInfo; member: Member } | null;
-}
-
 export interface Category {
   id: string;
   name: string;
@@ -142,6 +135,82 @@ export interface InstallmentPlanInput {
   assigneeId: string | null;
 }
 
+export interface Status {
+  hasHouseholds: boolean;
+  username: string | null;
+  households: HouseholdInfo[];
+  current: {
+    household: HouseholdInfo;
+    member: Member;
+    /** Verdadeiro quando esta máquina tem só uma cópia e o Anfitrião é outra. */
+    replica: boolean;
+  } | null;
+}
+
+/** Um Anfitrião anunciado na rede local. */
+export interface DiscoveredHost {
+  householdId: string;
+  name: string;
+  address: string;
+}
+
+export interface HostPreview {
+  household: HouseholdInfo;
+  fingerprint: string;
+  /** O código a conferir nos dois computadores antes de confiar. */
+  securityCode: string;
+}
+
+export type LinkState =
+  | "online"
+  | "offline"
+  | "protocol_mismatch"
+  | "unauthorized";
+
+export interface SyncInfo {
+  replica: boolean;
+  link: LinkState | null;
+  pending: number;
+  conflicts: number;
+  connected: number;
+  address: string | null;
+  securityCode: string | null;
+}
+
+export interface ConflictSide {
+  kind: EntryKind;
+  amountCents: number;
+  date: string;
+  description: string;
+  categoryName: string;
+  assigneeName: string;
+  status: EntryStatus;
+}
+
+export interface Conflict {
+  entryId: string;
+  /** Ausente se o lançamento foi excluído neste computador. */
+  mine: ConflictSide | null;
+  /** Ausente se o Anfitrião não tem, ou excluiu, o lançamento. */
+  theirs: ConflictSide | null;
+  /** Presente quando o Anfitrião recusou a alteração. */
+  reason: string | null;
+}
+
+export interface Invite {
+  id: string;
+  code: string;
+  expiresAt: string;
+}
+
+/**
+ * Executa o que só o Anfitrião pode fazer. Numa cópia, o pedido vai pela rede
+ * e falha se o Anfitrião estiver fora de alcance.
+ */
+function host<T>(command: string, args?: unknown): Promise<T> {
+  return invoke<T>("host_command", { command: { command, args } });
+}
+
 export const api = {
   status: () => invoke<Status>("status"),
   login: (username: string, password: string, remember: boolean) =>
@@ -156,20 +225,50 @@ export const api = {
   selectHousehold: (id: string) => invoke<Status>("select_household", { id }),
   closeHousehold: () => invoke<Status>("close_household"),
 
+  discover: () => invoke<DiscoveredHost[]>("discover"),
+  inspectHost: (address: string) =>
+    invoke<HostPreview>("inspect_host", { address }),
+  joinHousehold: (args: {
+    address: string;
+    fingerprint: string;
+    code: string;
+    username: string;
+    password: string;
+    remember: boolean;
+  }) => invoke<Status>("join_household", args),
+
+  syncInfo: () => invoke<SyncInfo>("sync_info"),
+  conflicts: () => invoke<Conflict[]>("conflicts"),
+  resolveConflict: (entryId: string, keepMine: boolean) =>
+    invoke<void>("resolve_conflict", { entryId, keepMine }),
+
   members: () => invoke<Member[]>("members"),
+  setMemberRole: (id: string, role: Role) =>
+    host<Member>("set_member_role", { id, role }),
+  removeMember: (id: string) => host<void>("remove_member", { id }),
+  resetPassword: (id: string, password: string) =>
+    host<void>("reset_password", { id, password }),
+  changePassword: (current: string, next: string) =>
+    host<void>("change_password", { current, new: next }),
+  invites: () => host<Invite[]>("invites"),
+  createInvite: () => host<Invite>("create_invite"),
+  revokeInvite: (id: string) => host<void>("revoke_invite", { id }),
+
   categories: () => invoke<Category[]>("categories"),
   createCategory: (input: { name: string; kind: EntryKind }) =>
-    invoke<Category>("create_category", { input }),
+    host<Category>("create_category", input),
   renameCategory: (id: string, name: string) =>
-    invoke<Category>("rename_category", { id, name }),
+    host<Category>("rename_category", { id, name }),
   setCategoryArchived: (id: string, archived: boolean) =>
-    invoke<Category>("set_category_archived", { id, archived }),
+    host<Category>("set_category_archived", { id, archived }),
 
   entries: (filter: EntryFilter) => invoke<Entry[]>("entries", { filter }),
   createEntry: (input: EntryInput) => invoke<Entry>("create_entry", { input }),
   /** `following` estende a alteração aos previstos seguintes da mesma Recorrência. */
   updateEntry: (id: string, input: EntryInput, following: boolean) =>
-    invoke<Entry>("update_entry", { id, input, following }),
+    following
+      ? host<Entry>("update_entry_and_following", { id, input })
+      : invoke<Entry>("update_entry", { id, input }),
   settleEntry: (id: string, amountCents: number) =>
     invoke<Entry>("settle_entry", { id, amountCents }),
   deleteEntry: (id: string) => invoke<void>("delete_entry", { id }),
@@ -178,13 +277,13 @@ export const api = {
 
   recurrences: () => invoke<Recurrence[]>("recurrences"),
   createRecurrence: (input: RecurrenceInput) =>
-    invoke<Recurrence>("create_recurrence", { input }),
-  endRecurrence: (id: string) => invoke<void>("end_recurrence", { id }),
+    host<Recurrence>("create_recurrence", input),
+  endRecurrence: (id: string) => host<void>("end_recurrence", { id }),
   installmentPlans: () => invoke<InstallmentPlan[]>("installment_plans"),
   createInstallmentPlan: (input: InstallmentPlanInput) =>
-    invoke<InstallmentPlan>("create_installment_plan", { input }),
+    host<InstallmentPlan>("create_installment_plan", input),
   deleteInstallmentPlan: (id: string) =>
-    invoke<void>("delete_installment_plan", { id }),
+    host<void>("delete_installment_plan", { id }),
 };
 
 /** A mensagem de um erro vindo de um comando, já pronta para exibir. */

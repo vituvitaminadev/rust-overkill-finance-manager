@@ -19,10 +19,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { api, errorMessage, type Status } from "@/lib/api";
 import { useSessionAction } from "@/lib/session";
+import { JoinForm } from "./JoinForm";
 
 /** As residências de quem está conectado, com a opção de criar mais uma. */
 export function HouseholdsScreen({ status }: { status: Status }) {
   const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
   const select = useSessionAction(api.selectHousehold);
   const logout = useSessionAction(api.logout);
 
@@ -50,12 +52,25 @@ export function HouseholdsScreen({ status }: { status: Status }) {
           <Button className="mt-2" onClick={() => setCreating(true)}>
             Nova residência
           </Button>
+          <Button variant="outline" onClick={() => setJoining(true)}>
+            Entrar com convite
+          </Button>
           <Button variant="ghost" onClick={() => logout.mutate(undefined)}>
             Sair
           </Button>
         </CardContent>
       </Card>
       {creating && <NewHouseholdDialog onClose={() => setCreating(false)} />}
+      {joining && (
+        <Dialog open onOpenChange={(open) => !open && setJoining(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Entrar com convite</DialogTitle>
+            </DialogHeader>
+            <JoinForm onCancel={() => setJoining(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
     </main>
   );
 }

@@ -6,3 +6,5 @@ O app trafega senhas e dados financeiros pela rede local, sem nuvem nem autorida
 
 - Trocar o certificado do Anfitrião (inclusive ao migrar de máquina) invalida o pareamento de todos os apps.
 - Não há acesso pela internet: o Anfitrião só é alcançável na rede local, descoberto por mDNS.
+- No primeiro contato não há o que fixar ainda, então a Cópia aceita o certificado apresentado e mostra o Código de segurança dele; a pessoa o compara com o exibido no Anfitrião antes de digitar o Convite. Sem essa conferência, alguém na mesma rede poderia se passar pelo Anfitrião durante o pareamento.
+- O certificado fica guardado no banco da residência, e não na instalação do app.

@@ -25,3 +25,6 @@ finance-core = { version = "0.1.0", path = "../crates/core" }
 serde = { version = "1.0.229", features = ["derive"] }
 uuid = "1.29.2"
 keyring = "4.2.0"
+mdns-sd = "0.21.7"
+finance-server = { version = "0.1.0", path = "../crates/server" }
+tokio = { version = "1.54.1", features = ["sync"] }
