@@ -1,6 +1,6 @@
 [package]
 name = "finance-manager"
-version = "0.2.0"
+version = "0.3.1"
 description = "Gestão compartilhada das finanças de uma residência"
 authors = ["vituvitaminadev"]
 edition = "2024"

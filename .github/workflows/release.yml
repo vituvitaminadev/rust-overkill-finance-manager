@@ -21,6 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # O updater compara a versão de dentro do app, não o nome da tag: uma tag
+      # nova sobre a versão antiga publicaria um release que ninguém recebe.
+      - name: Check that the tag matches the app version
+        shell: bash
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "v$version" != "${{ github.ref_name }}" ]; then
+            echo "::error::A tag é ${{ github.ref_name }}, mas a versão do app é $version. Atualize a versão em src-tauri/tauri.conf.json, src-tauri/Cargo.toml e package.json antes de criar a tag."
+            exit 1
+          fi
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
